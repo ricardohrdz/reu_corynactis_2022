@@ -1,0 +1,360 @@
+---
+title: "recovery_obs_final"
+output: html_document
+date: '2022-09-03'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+
+
+library(tidyverse)
+library(hexbin)
+library(patchwork)
+library(RSQLite)
+library(here)
+library(janitor)
+library(lubridate)
+
+library(hrbrthemes)
+library(viridis)
+library(ggplot2)
+library(reshape2)
+```
+
+created a data frame containg the excel csv sheet
+```{r}
+recovery_observations <- read_csv(here("data","Recovery_Observations.csv")) %>%
+  clean_names()
+
+```
+
+Changed temperature column to a factor and removed all na values
+```{r}
+recovery_observations_t <- recovery_observations %>% 
+  select(date, temperature_treatment,duration, genet, number_open_complete,number_semi_open, number_closed) %>% 
+  filter(!is.na(number_open_complete)) %>% 
+  mutate(genet=as.character(genet)) %>% 
+  mutate(temp_c= as.factor(temperature_treatment))
+
+```
+
+Graphed with out genets and only the date, temp duration + avg open, avg semi and avg close
+```{r}
+grouped <- recovery_observations_t %>% 
+  mutate(not_open= (number_semi_open + number_closed)) %>% 
+  group_by(date, temp_c,duration) %>%
+  summarize(avg_open = mean(number_open_complete),
+          avg_close = mean(not_open)) %>% 
+  mutate(duration= factor(duration,levels = c("24hr", "3days", "1week")))
+
+ggplot(grouped, aes(x=temp_c, y= avg_open))+ 
+  geom_boxplot()+
+  facet_wrap(facets = vars(duration))+
+  geom_jitter(color="black", size= 0.4, alpha= 7, width = 0.01)+
+  labs(title = "Open c. Californica polyps per temperature & duration", x= "Temperature in °C", y= "Average Open")+
+  theme_bw()
+
+ggsave(here("figures","Open c. Californica polyps per temperature & duration.png"),
+       width= 10, height= 7)
+```
+
+Checking the significant values for the number of polyps that wer opened
+```{r}
+group_24 <- grouped %>% 
+  filter(duration=="24hr")
+cory_anova <-aov(data=group_24,avg_open~temp_c) 
+summary(cory_anova)
+TukeyHSD(cory_anova)
+
+group_3days <- grouped %>% 
+  filter(duration=="3days")
+cory_anova <-aov(data=group_3days,avg_open~temp_c)
+summary(cory_anova)
+TukeyHSD(cory_anova)
+
+group_week <- grouped %>% 
+  filter(duration=="1week")
+cory_anova <-aov(data=group_week,avg_open~temp_c)
+summary(cory_anova)
+TukeyHSD(cory_anova)
+```
+
+
+observing the graphed with out genets and only the dat, temp duration + avg close
+```{r}
+
+ggplot(group_week, aes(x=temp_c, y= avg_close))+ 
+  geom_boxplot()+
+  #facet_wrap(facets = vars(duration))+
+  geom_jitter(color="black", size= 0.4, alpha= 7,width = 0.01)+
+  labs(title = "Closed c. Californica polpys per temperature during a marine heatwave simulation", x= "Temperature in °C", y= "Average Closed")+
+  theme_bw()
+
+ggsave(here("figures","Closed c. Californica polpys per temperature during a marine heatwave simulation.png"),
+       width= 10, height= 7)
+  
+```
+
+```{r}
+
+group_24_c <- grouped %>% 
+  filter(duration=="24hr")
+
+cory_anova <-aov(data=group_24_c,avg_close~temp_c) 
+summary(cory_anova)
+TukeyHSD(cory_anova)
+
+
+group_3days_c <- grouped %>% 
+  filter(duration=="3days")
+
+cory_anova <-aov(data=group_3days_c,avg_close~temp_c) 
+summary(cory_anova)
+TukeyHSD(cory_anova)
+
+group_week_c <- grouped %>% 
+  filter(duration=="1week")
+
+cory_anova <-aov(data=group_week_c,avg_close~temp_c) 
+summary(cory_anova)
+TukeyHSD(cory_anova)
+
+```
+
+```{r}
+recovery_observations_t_d <- recovery_observations %>% 
+  select(date, temperature_treatment,duration, genet,total_polyps, number_open_complete,number_semi_open, number_closed) %>% 
+  filter(!is.na(number_open_complete)) %>% 
+  mutate(genet=as.character(genet)) %>% 
+  mutate(temp_c= as.factor(temperature_treatment))
+
+grouped_death <- recovery_observations_t_d %>% 
+  mutate(not_open= (number_semi_open + number_closed)) %>% 
+  group_by(date, temp_c,duration, total_polyps, genet) %>%
+  #summarize(avg_open = mean(number_open_complete),
+         # avg_close = mean(not_open)) %>% 
+  mutate(duration= factor(duration,levels = c("24hr", "3days", "1week")))
+
+ggplot(grouped_death, aes(x=date, y=total_polyps, group=genet))+
+  geom_line(aes(color=genet))+
+  facet_wrap(facets = vars(duration))+
+  scale_color_manual(values = c("1"="#FF5733","2"="#CD2E05","3"="#BA7F6D"))+
+  labs(title = "Total c. Californica polpys vs death rates", x= "Day", y= "Total Polyps")+
+  theme_bw()
+```
+
+imported death rates data set
+```{r}
+death_obs <- read_csv(here("data","death_obs.csv")) %>%
+  clean_names() %>% 
+  mutate(date= mdy(date))
+```
+
+I dont know what i was doing here
+```{r}
+death_obs_genet <- death_obs%>% 
+  select(date, temperature_treatment_c, genet,original, current_n,duration) %>% 
+  mutate(genet=as.character(genet)) %>% 
+  mutate(temperature_c= as.factor(temperature_treatment_c))
+ 
+death_obs_genet_ex <- death_obs_genet[-649:-792 ,] %>% 
+  group_by(date, genet,duration) %>% 
+  summarize(original= mean(original),
+            current_n= mean(current_n))
+death_obs_genet_ex <- death_obs_genet[-649:-792 ,] %>% 
+  group_by(date, genet,duration) %>% 
+  summarise(original= sum(original),
+            current_n= sum(current_n)) %>%
+  filter(genet=="3", 
+         duration == "1week")
+
+death_1 <- death_obs %>%
+  filter(genet=="3", 
+         duration == "1week")
+
+ggplot(death_obs_genet_ex, aes(x=date, y=current_n, color=genet))+
+  geom_line()+
+  facet_wrap(facets = vars(duration))
+
+```
+
+
+```{r}
+recovery_merge <- recovery_observations %>% 
+  #filter(!is.na(number_open_complete)) %>% 
+  mutate(genet=as.character(genet)) %>% 
+  mutate(temp_c= as.factor(temperature_treatment)) %>% 
+  mutate(date= mdy(date)) %>% 
+  mutate(temp=gsub("°C","",temp_c)) %>% 
+  select(date,  time, temp, duration ,genet ,total_polyps , number_open_complete,
+         number_semi_open, number_closed) %>% 
+  distinct() %>% 
+  #mutate_all(number_open_complete, replace_na(0)) %>% 
+  replace(is.na(.), 0)# %>% 
+  #select(date, time, temp, duration ,genet ,total_polyps)
+  
+  
+str(recovery_merge)
+death_merge <- death_obs %>% 
+  mutate(genet=as.character(genet)) %>% 
+  mutate(temp= as.factor(temperature_treatment_c)) %>% 
+  mutate(date= ymd(date)) %>% 
+  select(date, day_2, time, temp, duration, genet,original, current_n,actual_day )%>% 
+  distinct()
+```
+
+```{r}
+#death_merge <- death_obs %>% 
+  #mutate(genet=as.character(genet)) %>% 
+  #mutate(temp= as.factor(temperature_treatment_c)) %>% 
+  #mutate(date= ymd(date)) %>% 
+  #select(date, time, temp, duration, genet, original, current_n,actual_day )%>% 
+  #distinct()
+```
+```{r}
+death_recovery <- full_join(recovery_merge,death_merge) %>% 
+  distinct()
+
+str(death_merge)
+```
+
+Generated the Death rate Figure
+```{r}
+death <- death_recovery %>% 
+  #mutate(day=as.factor(actual_day)) %>% 
+  mutate(day=as.factor(day_2)) %>% 
+   #mutate(actual= current_n/original) %>% 
+  group_by(day, genet,duration, total_polyps) %>% 
+  summarise(original= sum(original), 
+           current_n=sum(current_n)) %>% 
+  filter(day!= "0") %>% 
+   mutate(duration= factor(duration,levels = c("24hr", "3days", "1week"))) %>% 
+  distinct()
+  
+  death_dup <- death %>% 
+  duplicated()
+  #%>% 
+  #filter(!is.na(current_n)) %>% 
+  #filter(!is.na(original))
+  
+
+ggplot(death, aes(x=day, y=current_n, group=genet))+
+  geom_line(aes(color=genet))+
+  facet_wrap(facets = vars(duration))+
+  scale_color_manual(values = c("1"="#FF5733","2"="#CD2E05","3"="#BA7F6D"))+
+  labs(title = "Total c. Californica polpys vs death rates", x= "Day", y= "Total Polyps")+
+  theme_bw()
+
+#ggsave(here("figures","Total c. Californica polpys vs death rates.png"),
+       #width= 10, height= 7)
+```
+Why not just graph the death observations by themselves
+```{r}
+death_obs_2 <- death_obs %>% 
+  mutate(genet=as.character(genet)) %>% 
+  mutate(temp= as.factor(temperature_treatment_c)) %>% 
+  mutate(date= ymd(date)) %>% 
+  select(date, time, temp, duration, genet, current_n,actual_day )%>%
+  #filter(duration== "1week") %>% 
+   mutate(day=as.factor(actual_day)) %>% 
+  group_by(day, genet,duration) %>% 
+  summarise(#original= sum(original), 
+           current_n= sum(current_n)) %>% 
+  mutate(duration= factor(duration,levels = c("24hr", "3days", "1week")))
+
+
+death_2 <- death_recovery %>% 
+  mutate(day=as.factor(actual_day)) %>% 
+  group_by(day, genet,duration) %>% 
+  summarise(original= sum(original), 
+           current_n= sum(current_n)) %>% 
+  mutate(duration= factor(duration,levels = c("24hr", "3days", "1week")) #%>% 
+  filter(duration== "1week")) #%>% 
+  #filter(!is.na(current_n)) %>% 
+  #filter(!is.na(original))
+
+ggplot(death_obs_2, aes(x=day, y=current_n, group=genet))+
+  geom_line(aes(color=genet))+
+  facet_wrap(facets = vars(duration))+
+  scale_color_manual(values = c("1"="#FF5733","2"="#CD2E05","3"="#BA7F6D"))+
+  labs(title = "Total c. Californica polpys vs death rates", x= "Day", y= "Total Polyps")+
+  theme_bw()
+
+```
+
+Looking at the recovery merge data
+```{r}
+recovery_death <- recovery_observations %>% 
+  #filter(!is.na(number_open_complete)) %>% 
+  mutate(genet=as.character(genet)) %>% 
+  mutate(temp_c= as.factor(temperature_treatment)) %>% 
+  mutate(date= mdy(date)) %>% 
+  mutate(temp=gsub("°C","",temp_c)) %>% 
+  select(date, time, temp, duration ,genet ,total_polyps , number_open_complete,
+         number_semi_open, number_closed) %>% 
+  distinct() %>% 
+  #mutate_all(number_open_complete, replace_na(0)) %>% 
+  replace(is.na(.), 0) %>%
+  mutate(duration= factor(duration,levels = c("24hr", "3days", "1week"))))
+  #select(date, time, temp, duration ,genet ,total_polyps)
+
+ggplot(recovery_death, aes(x=date, y=total_polyps, group=genet))+
+  geom_point(aes(color=genet))+
+  facet_wrap(facets = vars(duration))+
+  scale_color_manual(values = c("1"="#FF5733","2"="#CD2E05","3"="#BA7F6D"))+
+  labs(title = "Total c. Californica polpys vs death rates", x= "Day", y= "Total Polyps")+
+  theme_bw()
+```
+
+```{r}
+ggplot(death, aes(x=day, y=current_n, group=genet))+
+  geom_line(aes(color=genet))+
+  facet_wrap(facets = vars(duration))+
+  scale_color_manual(values = c("1"="#ED1904","2"="#FFA13E","3"="#7A450E"))+
+  labs(title = "Total c. Californica polpys vs death rates", x= "Day", y= "Total Polyps")+
+  theme_bw()
+
+ggsave(here("figures","Total c. Californica polpys vs death rates.png"),
+       width= 10, height= 7)
+```
+
+
+```{r}
+death_24 <- death %>% 
+  filter(duration=="24hr")
+
+cory_anova_24 <-aov(data = death_24,current_n  ~ day) 
+summary(cory_anova_24)
+TukeyHSD(cory_anova_24)
+
+death_3days <- death %>% 
+  filter(duration=="3days")
+
+cory_anova_3days <-aov(data=death_3days,current_n~day)
+summary(cory_anova_3days)
+TukeyHSD(cory_anova_3days)
+
+death_week <- death %>% 
+  filter(duration=="1week")
+
+cory_anova_week <-aov(data=death_week,current_n~day)
+summary(cory_anova_week)
+TukeyHSD(cory_anova_week)
+```
+
+
+```{r}
+ggplot(death, aes(x=day, y=current_n, group=duration))+
+  geom_line(aes(color=duration))+
+  facet_wrap(facets = vars(genet))+
+  #scale_color_manual(values = c("1"="#FF5733","2"="#CD2E05","3"="#BA7F6D"))+
+  labs(title = "Total c. Californica polpys vs death rates", x= "Day", y= "Total Polyps")+
+  theme_bw()
+
+```
+

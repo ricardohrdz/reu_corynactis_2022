@@ -1,0 +1,252 @@
+---
+title: "Untitled"
+output: html_document
+date: '2022-07-27'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+library(tidyverse)
+library(hexbin)
+library(patchwork)
+library(RSQLite)
+library(here)
+library(janitor)
+library(lubridate)
+```
+
+install packages
+```{r}
+library(tidyverse)
+library(hexbin)
+library(patchwork)
+library(RSQLite)
+library(here)
+library(janitor)
+library(lubridate)
+```
+
+thats where i installed my packages
+
+example on doing data collection
+```{r pressure, echo=FALSE, messages=FALSE}
+t1_tank <- read_csv(here("data","0715_T1.csv")) %>% 
+  clean_names() %>% 
+  mutate(tank_number="Tank 1",date_time= mdy_hm(date))
+str(t1_tank)
+```
+
+get tank 1 together
+```{r}
+t1_tank_1 <- read_csv(here("data","0726-0727_T1_0.csv")) %>% 
+  clean_names() %>%  
+  mutate(tank_number="Tank 1",date= mdy_hm(date)) %>% 
+  select(date, temp_c, tank_number)
+  
+
+
+
+
+
+t1_tank_2 <- read_csv(here("data","Experiement_0803_T1_0.csv")) %>% 
+  clean_names() %>%  
+  mutate(tank_number="Tank 1",date= mdy_hm(date)) %>% 
+  select(date, temp_c, tank_number)
+
+t1_tank <- full_join(t1_tank_1,t1_tank_2)
+
+
+
+
+```
+
+tank 2
+```{r}
+t2_tank_1 <- read_csv(here("data","0726-0727_T2.csv")) %>% 
+  clean_names() %>%  
+  mutate(tank_number="Tank 2",date= mdy_hm(date)) %>% 
+  select(date, temp_c, tank_number)
+
+t2_tank_2 <- read_csv(here("data","Experiment_0803_T2.csv")) %>% 
+  clean_names() %>%  
+  mutate(tank_number="Tank 2",date= mdy_hm(date)) %>% 
+  select(date, temp_c, tank_number)
+
+t2_tank <- full_join(t2_tank_1,t2_tank_2)
+
+```
+tank 3
+```{r}
+t3_tank_1 <- read_csv(here("data","0726-0727_T3.csv")) %>% 
+  clean_names() %>%  
+  mutate(tank_number="Tank 3 ",date= mdy_hm(date)) %>% 
+  select(date, temp_c, tank_number)
+
+t3_tank_2 <- read_csv(here("data","Experiment_0803_T3.csv")) %>% 
+  clean_names() %>%  
+  mutate(tank_number="Tank 3",date= mdy_hm(date)) %>% 
+  select(date, temp_c, tank_number)
+
+t3_tank <- full_join(t3_tank_1,t3_tank_2)
+```
+ambient
+```{r}
+ambient <- read_csv(here("data","Experiment_0803_Amb.csv")) %>% 
+  clean_names() %>%  
+  mutate(tank_number="Tank 0",date= mdy_hm(date)) %>% 
+  select(date, temp_c, tank_number)
+```
+
+merge all temperatures together
+```{r}
+sump_1 <- full_join(t1_tank, t2_tank)
+sump_2 <- full_join(t3_tank, ambient)
+
+sump_tank <- full_join(sump_1 ,sump_2) %>% 
+  select(date, temp_c, tank_number) %>% 
+  filter(!is.na(temp_c)) %>% 
+  filter(date<=ymd_hms("2022-07-27 9:30:00")|date>= ymd_hms("2022-07-27 10:30:00")) %>% 
+  filter(date>ymd_hms("2022-07-26 11:30:00")) %>% 
+  filter(date<ymd_hms("2022-08-03 8:00:00")) %>% 
+  filter(date>ymd_hms("2022-07-28 00:00:00"))
+
+sump_tank_sum <- sump_tank %>% 
+  filter(date>ymd_hms("2022-07-28 00:00:00")) %>% 
+  group_by( tank_number) %>% 
+  summarize(mean= mean(temp_c), min=min(temp_c), max= max(temp_c), sd= sd(temp_c))
+
+head(sump_tank)
+str(sump_tank)
+```
+lets plot them all together
+```{r}
+ggplot(data= sump_tank, mapping= aes(x=date, y=temp_c, group= tank_number))+
+  geom_line(aes(color= tank_number))+
+  labs(title = "Temperature Treamtent", x= "Date", y= "Temperature in C")
+
+ggsave(here("figures","Temperature Treamtent.png"),
+       width= 10, height= 7)
+  
+  
+```
+
+created a new data frame with just dates and temp while also 
+filtering out the na values in the temp_c cloumn
+```{r}
+t1_temp_graph <- t1_tank %>%
+  select(date_time, temp_c) %>% 
+  filter(!is.na(temp_c))
+  
+```
+
+
+
+
+plotted the t1_temp_graph
+```{r}
+ggplot(t1_temp_graph, aes(x= date_time, y=temp_c))+
+  geom_point(size=0.1)
+```
+
+view data
+```{r}
+view(t1_temp_graph)
+```
+
+
+excluded unnecessary values
+```{r}
+t1_temp_graph[c(-1:-30, -680:-885),]
+```
+new code exluding the values before row 10
+```{r}
+t1_temp_graph_ex <- t1_temp_graph[c(-1:-30, -680:-885),]
+
+
+view(t1_temp_graph_ex)
+
+```
+
+```{r}
+
+```
+
+
+plotting new graph 
+```{r}
+ggplot(t1_temp_graph_ex, aes(x=date_time,y=temp_c)) +
+  geom_point(size=0.01)+
+  geom_line(aes(group=1))
+
+sum(1,2,3)
+```
+```{r}
+ggplot(t1_temp_graph_ex, aes(x=date_time,y=temp_c))+
+  geom_line(aes(group=1), size=0.75)
+```
+
+plotting new graph with differnt x and y values
+```{r}
+
+  ggplot(t1_temp_graph_ex, aes(x=date_time,y=temp_c))+
+  geom_line(group=1, size=0.75)+
+  labs(title = "Tank 1 Temp", x= "Date", y= "temperature in C")+
+  scale_y_continuous(limits=c(15,30))+
+  theme_bw()
+
+ggsave(here("figures","Tank 1 Temp.png"), width= 10, height= 7)
+```
+
+imported the complete temperature logs from 07/26/22-08/03/22 and exclued the times where
+```{r}
+t1_tank <- read_csv(here("data","0726-0727_T1_0.csv")) %>% 
+  clean_names() %>% 
+  mutate(date= mdy_hm(date)) %>% 
+  select(date, temp_c) %>% 
+  filter(!is.na(temp_c))
+
+t1_tank_ex <- t1_tank %>% 
+  filter(date>="2022-07-26 11:28:00") %>% 
+  filter(!(temp_c==24.738)) %>% 
+  filter(!(temp_c==27.567)) %>% 
+  filter(!(temp_c==26.977)) %>% 
+  filter(!(temp_c==25.42970)) %>% 
+  filter(!(temp_c==25.42819)) %>% 
+  filter(!(temp_c==25.43121))
+  
+
+  filter(!(temp_c==25.43121)) %>%
+  filter(!(temp_c==25.42970)) %>% 
+  filter(!(temp_c==26.97700)) %>% 
+  filter(!(temp_c==25.42819)) %>% 
+  filter(!(temp_c==25.42970)) %>% 
+  filter(!(temp_c==25.42819)) %>% 
+  filter(!(temp_c==25.43121))
+  
+ 
+  
+  
+
+
+ggplot(t1_tank_ex, aes(x=date,y=temp_c))+
+  geom_line(group=1, size=0.75)+
+  labs(title = "Tank 1 Temp", x= "Date", y= "temperature in C")+
+  scale_y_continuous(limits=c(15,30))+
+  theme_bw()
+ggplot(t1_tank_ex, aes(x=date,y=temp_c))+
+  geom_point()
+
+
+```
+
+filter dates that i dont need
+```{r}
+
+```
+
+
+```{r}
+sample.int(6,3)
+```
+

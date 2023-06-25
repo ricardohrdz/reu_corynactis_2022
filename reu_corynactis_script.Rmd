@@ -1,0 +1,284 @@
+---
+title: "reu_corynatcis_script"
+output: html_document
+date: '2022-10-17'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(tidyverse)
+library(hexbin)
+library(patchwork)
+library(RSQLite)
+library(here)
+library(janitor)
+library(lubridate)
+
+library(hrbrthemes)
+library(viridis)
+library(ggplot2)
+library(reshape2)
+```
+
+created a data frame containg the excel csv sheet
+```{r}
+recovery_observations <- read_csv(here("data","Recovery_Observations.csv")) %>%
+  clean_names()
+```
+
+Changed temperature column to a factor and removed all na values
+```{r}
+recovery_observations_t <- recovery_observations %>% 
+  select(date, temperature_treatment,duration, genet, number_open_complete,number_semi_open, number_closed) %>% 
+  filter(!is.na(number_open_complete)) %>% 
+  mutate(genet=as.character(genet)) %>% 
+  mutate(temp_c= as.factor(temperature_treatment))
+
+```
+
+Graphed with out genets and only the date, temp duration + avg open, avg semi and avg close
+```{r}
+grouped <- recovery_observations_t %>% 
+  mutate(not_open= (number_semi_open + number_closed)) %>%
+  group_by(date, temp_c,duration) %>%
+  summarize(avg_open = mean((number_open_complete))/(number_open_complete+not_open),
+          avg_close = mean((not_open))/(number_open_complete+not_open)) %>% 
+  mutate(duration= factor(duration,levels = c("24hr", "3days", "1week")))
+  
+
+grouped_t <- groupe
+  
+
+ggplot(grouped, aes(x=temp_c, y= avg_open))+ 
+  geom_boxplot()+
+  facet_wrap(facets = vars(duration))+
+  geom_jitter(color="black", size= 0.4, alpha= 7, width = 0.01)+
+  labs(title = "Open polyps per temperature & duration", x= "Temperature in °C", y= "Percentage Open")+
+  #theme_bw()
+  theme(text =(element_text(size=32)))
+
+ggsave(here("figures","Open c. Californica polyps per temperature & duration.png"),
+       width= 20, height= 7)
+```
+
+Checking the significant values for the number of polyps that wer opened
+```{r}
+
+
+group_24 <- grouped %>% 
+  filter(duration=="24hr")
+cory_anova <-aov(data=group_24,avg_open~temp_c) 
+summary(cory_anova)
+TukeyHSD(cory_anova)
+
+group_3days <- grouped %>% 
+  filter(duration=="3days")
+cory_anova <-aov(data=group_3days,avg_open~temp_c)
+summary(cory_anova)
+TukeyHSD(cory_anova)
+
+group_week <- grouped %>% 
+  filter(duration=="1week")
+cory_anova <-aov(data=group_week,avg_open~temp_c)
+summary(cory_anova)
+TukeyHSD(cory_anova)
+```
+
+
+observing the graphed with out genets and only the date, temp duration + avg close
+```{r}
+
+ggplot(group_week, aes(x=temp_c, y= avg_close))+ 
+  geom_boxplot()+
+  #facet_wrap(facets = vars(duration))+
+  geom_jitter(color="black", size= 0.4, alpha= 7,width = 0.01)+
+  labs(title = "Closed polpys per temperature for 1 week MHW ", x= "Temperature in °C", y= "Percentage Closed")+
+  #theme_bw()
+  theme(text =(element_text(size=32)))+
+  labs(title = str_wrap("Closed polpys per temperature for 1 week MHW ",40))
+
+ggsave(here("figures","Closed polpys per temperature for 1 week MHW.png"),
+       width= 12, height= 7)
+  
+```
+
+```{r}
+
+group_24_c <- grouped %>% 
+  filter(duration=="24hr")
+
+cory_anova <-aov(data=group_24_c,avg_close~temp_c) 
+summary(cory_anova)
+TukeyHSD(cory_anova)
+
+
+group_3days_c <- grouped %>% 
+  filter(duration=="3days")
+
+cory_anova <-aov(data=group_3days_c,avg_close~temp_c) 
+summary(cory_anova)
+TukeyHSD(cory_anova)
+
+group_week_c <- grouped %>% 
+  filter(duration=="1week")
+
+cory_anova <-aov(data=group_week_c,avg_close~temp_c) 
+summary(cory_anova)
+TukeyHSD(cory_anova)
+
+```
+
+
+new time series data for 24 hours during treatment
+```{r}
+twentyfour_death <- read_csv(here("data","24hrs_death.csv"))
+
+twentyfour_death_f <- twentyfour_death %>% 
+  mutate(genet=as.character(genet)) %>% 
+  mutate(temp= as.factor(temp)) %>% 
+  mutate(hours= as.factor(hours)) %>% 
+  mutate(duration= as.factor(duration)) %>% 
+  select(genet, temp, hours,current_polyps)
+
+str(twentyfour_death_f)
+
+ggplot(twentyfour_death_f, aes(x=hours, y=current_polyps, group=genet))+
+  geom_line(aes(color=genet))+
+  facet_wrap(facets = vars(temp))+
+  scale_color_manual(values = c("1"="#FF5733","2"="#CD2E05","3"="#BA7F6D"))+
+  labs(title = "Death rates in a 24 hour treatment", x= "Hours", y= "Current Polyps")+
+  theme_bw()
+ggsave(here("figures","Death rates in a 24 hour treatment.png"),
+       width= 10, height= 7)
+```
+
+```{r}
+three_death <- read_csv(here("data","3days_death.csv"))
+
+three_death_f <- three_death %>% 
+  select(genet, temp, hours,current_polyps) %>%  
+  mutate(genet=as.character(genet)) %>% 
+  mutate(temp= as.factor(temp)) %>% 
+  mutate(hours= as.factor(hours)) 
+  
+
+str(three_death_f)
+
+ggplot(three_death_f, aes(x=hours, y=current_polyps, group=genet))+
+  geom_line(aes(color=genet))+
+  facet_wrap(facets = vars(temp))+
+  scale_color_manual(values = c("1"="#FF5733","2"="#CD2E05","3"="#BA7F6D"))+
+  labs(title = "Death rates in a 3day treatment", x= "Hours", y= "Current Polyps")+
+  theme_bw()
+
+ggsave(here("figures","Death rates in a 3day treatment.png"),
+       width= 10, height= 7)
+```
+
+```{r}
+week_death <- read_csv(here("data","1week_death.csv"))
+
+week_death_f <- week_death %>% 
+  select(genet, temp, hours,current_polyps) %>%  
+  mutate(genet=as.character(genet)) %>% 
+  mutate(temp= as.factor(temp)) %>% 
+  mutate(hours= as.factor(hours)) 
+  
+
+str(week_death_f)
+
+ggplot(week_death_f, aes(x=hours, y=current_polyps, group=genet))+
+  geom_line(aes(color=genet))+
+  facet_wrap(facets = vars(temp))+
+  scale_color_manual(values = c("1"="#FF5733","2"="#CD2E05","3"="#BA7F6D"))+
+  labs(title = "Death rates in a 1 week treatment", x= "Hours", y= "Current Polyps")+
+  theme_bw()
+ggsave(here("figures","Death rates in a 1 week treatment.png"),
+       width= 10, height= 7)
+```
+24 hour treatment but only the 27 temp treatment
+```{r}
+test_24 <- twentyfour_death_f %>% 
+  filter(temp=="27")
+
+ggplot(test_24, aes(x=hours, y=current_polyps, group=genet))+
+  geom_line(aes(color=genet))+
+  facet_wrap(facets = vars(temp))+
+  scale_color_manual(values = c("1"="#F16A00","2"="#FF0C01","3"="#613508"))+
+  labs(title = "Death rates in a 24 hour treatment", x= "Hours", y= "Current Polyps")+
+  #theme_bw()
+  theme(text =(element_text(size=24)))
+
+ggsave(here("figures","Mortality rates in a 24 hour treatment.png"),
+       width= 10, height= 7)
+```
+3day treatment but only the 27 temp treatment
+```{r}
+test_3days <- three_death_f %>% 
+  filter(temp=="27")
+
+ggplot(test_3days, aes(x=hours, y=current_polyps, group=genet))+
+  geom_line(aes(color=genet))+
+  facet_wrap(facets = vars(temp))+
+  scale_color_manual(values = c("1"="#F16A00","2"="#FF0C01","3"="#613508"))+
+  labs(title = "Death rates in a 3 day treatment", x= "Hours", y= "Current Polyps")+
+  #theme_bw()
+  theme(text =(element_text(size=24)))
+
+ggsave(here("figures","Mortality rates in a 3 day treatment.png"),
+       width= 10, height= 7)
+```
+week treatment but only the 27 temp treatment
+```{r}
+test_week <- week_death_f %>% 
+  filter(temp=="27")
+
+ggplot(test_week, aes(x=hours, y=current_polyps, group=genet))+
+  geom_line(aes(color=genet))+
+  facet_wrap(facets = vars(temp))+
+  scale_color_manual(values = c("1"="#F16A00","2"="#FF0C01","3"="#613508"))+
+  labs(title = "Death rates in a 1 week treatment", x= "Hours", y= "Current Polyps")+
+  #theme_bw()
+  theme(text =(element_text(size=24)))
+
+ggsave(here("figures","Mortality rates in a 1 week treatment.png"),
+       width= 10, height= 7)
+```
+
+significant trends
+```{r}
+week_death<- week_death_f %>% 
+  filter(temp=="27")
+
+week_ttest <-aov(data = week_death,current_polyps~hours) 
+summary(week_ttest)
+TukeyHSD(week_ttest)
+```
+
+```{r}
+time_series_all <- read_csv(here("data","time_series_all.csv"))
+
+time_series_27 <- time_series_all %>% 
+  mutate(genet=as.character(genet)) %>% 
+  mutate(temp= as.factor(temp)) %>% 
+  mutate(hours= as.factor(hours)) %>% 
+  mutate(duration= as.factor(duration)) %>% 
+  mutate(duration= factor(duration,levels = c("24hrs", "3days", "1week"))) %>% 
+  select(genet,duration, temp, hours,current_polyp) %>% 
+  filter(temp=="27")
+  
+ggplot(time_series_27, aes(x=hours, y=current_polyp, group=genet))+
+  geom_line(aes(color=genet, size= 0.1))+
+  facet_wrap(facets = vars(duration))+
+  scale_color_manual(values = c("1"="#F16A00","2"="#FF0C01","3"="#613508"))+
+  labs(title = "Mortality rates in a 27°C treatment per duration", x= "Hours", y= "Current Polyps")+
+  theme(text=(element_text(size=32)))
+  
+ggsave(here("figures", "Mortality rates in a 27°C treatment per duration.png"),
+       width= 20, height= 7)
+```
+
